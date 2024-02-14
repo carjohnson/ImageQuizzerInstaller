@@ -1,0 +1,4 @@
+setup-win.spec
+.vscode/
+build/
+dist/
