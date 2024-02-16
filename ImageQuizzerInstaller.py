@@ -21,6 +21,8 @@
 
     Usage:      >> cd to download of BainesImageQuizzer project
                 >> setup-win
+
+    Documentation: https://baines-imaging-research-laboratory.github.io/ImageQuizzerDocumentation
 '''
 
 from PyQt5 import QtWidgets
@@ -36,6 +38,8 @@ from pathlib import Path
 from datetime import datetime
 import shutil
 import traceback
+import re
+import fileinput
 
 
 ##########################################################################
@@ -78,52 +82,53 @@ class FormWidget(QWidget):
 
         self.statusBar = self.parent().statusBar
         self.sInstallDir = None
+        self.sSlicerDir  = None
 
 
         self.sCurrentDirectory = os.getcwd()
-        sDefaultInstallDirectory = os.path.join(os.path.dirname(self.sCurrentDirectory),'BainesImageQuizzer')
+        self.sDefaultInstallDirectory = os.path.join(os.path.dirname(self.sCurrentDirectory),'BainesImageQuizzer')
 
         self.qMainLayout = QtWidgets.QGridLayout()
 
         qLblInfo = QtWidgets.QLabel()
         qLblInfo.setWordWrap(True)
-        qLblInfo.setText("This application will install the Baines Image Quizzer at the specified destination, " +\
+        qLblInfo.setText("\nThis application will install the Baines Image Quizzer at the specified destination, " +\
                          "replacing any pre-existing module. Additionally, it will create a backup" +\
-                        " if requested in order to preserve any input settings and output results.\n")
+                         " if requested in order to preserve any input settings and output results.\n")
+ 
 
-        qLblInstallPath=QtWidgets.QLabel()
-        qLblInstallPath.setText("Install path :")
+        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # module copy
 
-        self.qInstallPath = QtWidgets.QLineEdit()
-        self.qInstallPath.setText(sDefaultInstallDirectory)
+
+        qLblInstallPath = QtWidgets.QLabel("Install location :")
+
+        self.qLineInstallPath = QtWidgets.QLineEdit()
+        self.qLineInstallPath.setText(self.sDefaultInstallDirectory)
         
         qBtnChangePath = QtWidgets.QPushButton("Change")
-        qBtnChangePath.setCheckable(True)
-        qBtnChangePath.clicked.connect(lambda:self.getNewInstallPath(self.sCurrentDirectory))
-
+        qBtnChangePath.clicked.connect(self.getNewInstallPath)
 
         qBtnInstall = QtWidgets.QPushButton("Install")
-        qBtnInstall.setCheckable(True)
         qBtnInstall.clicked.connect(self.setupInstall)
-
 
          
         # add widgets to layout
         self.qMainLayout.addWidget(qLblInfo,0,0)
         self.qMainLayout.addWidget(qLblInstallPath,1,0)
-        self.qMainLayout.addWidget(self.qInstallPath,2,0)
+        self.qMainLayout.addWidget(self.qLineInstallPath,2,0)
         self.qMainLayout.addWidget(qBtnChangePath,2,1)
         self.qMainLayout.addWidget(qBtnInstall,3,1)
+
  
         self.setLayout(self.qMainLayout)
 
-
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def getNewInstallPath(self, sCurrentDirectory):
+    def getNewInstallPath(self):
 
         self.statusBar.showMessage("")
         if self.sInstallDir == None:
-            sDisplayDir = sCurrentDirectory
+            sDisplayDir = os.path.dirname(self.sCurrentDirectory)
         else:
             sDisplayDir = os.path.dirname(self.sInstallDir)
         
@@ -134,17 +139,17 @@ class FormWidget(QWidget):
                                                 QtWidgets.QFileDialog.ShowDirsOnly)
         
         if self.sInstallDir == '':  # cancelled
-            self.qInstallPath.setText(sDisplayDir)
+            self.qLineInstallPath.setText(self.sDefaultInstallDirectory)
         else:
-            self.qInstallPath.setText(self.sInstallDir)
+            self.qLineInstallPath.setText(self.sInstallDir)
             
-
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     def setupInstall(self):
 
         self.statusBar.showMessage("")
-        oInstallLogic = InstallerLogic()
-        oInstallLogic.installSoftware(self.sCurrentDirectory, self.qInstallPath.text(), self.statusBar)
+
+        oInstallLogic = InstallerLogic(self.statusBar)
+        oInstallLogic.installSoftware(self.sCurrentDirectory, self.qLineInstallPath.text())
 
 
 ##########################################################################
@@ -153,20 +158,22 @@ class FormWidget(QWidget):
 #
 ##########################################################################
 class InstallerLogic():
+
+    def __init__(self,qStBar):
+        self.statusBar = qStBar
+
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    def installSoftware(self, sSourceDir, sInstallDir, qStBar):
+    def installSoftware(self, sSourceDir, sInstallDir):
         ''' Backup previous install if folder exists and it is not empty.
             Backup by renaming existing folder with .BAK-Date-Time suffix.
             
             Copy all files and folders into selected install dir.
         '''
 
-
         try:
 
             self.sSourceDir = sSourceDir
             self.sInstallDir = sInstallDir
-            self.statusBar = qStBar
             qMsgBox = QtWidgets.QMessageBox()
 
             sPathInstall = Path(self.sInstallDir)
@@ -177,7 +184,8 @@ class InstallerLogic():
                 if len(os.listdir(sPathInstall)) > 0:
                     # folder not empty
                     qMsgBox.setIcon(QtWidgets.QMessageBox.Question)
-                    qMsgBox.setText("Selected install folder exists.\nA backup will capture existing settings and results in the Inputs and Outputs folders.")
+                    qMsgBox.setWindowTitle("Backup")
+                    qMsgBox.setText("Selected install folder exists.\n\nA backup will capture existing settings and results in the Inputs and Outputs folders.")
                     qMsgBox.setInformativeText( "Do you want to backup existing module?")
                     qMsgBox.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
                     qMsgBox.setDefaultButton(QtWidgets.QMessageBox.Yes)
@@ -189,6 +197,7 @@ class InstallerLogic():
                         sPathBackupFolder = os.path.join (os.path.dirname(sPathInstall),\
                                                         os.path.basename(sPathInstall) + ".BAK-" + sCurrent_datetime)
                         qMsgBox.setIcon(QtWidgets.QMessageBox.Question)
+                        qMsgBox.setWindowTitle("Backup")
                         qMsgBox.setText("Creating backup folder : ")
                         qMsgBox.setInformativeText( sPathBackupFolder )
                         qMsgBox.setStandardButtons(QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel)
@@ -201,6 +210,7 @@ class InstallerLogic():
                         
             # copy folders and subfolders to install dir
             qMsgBox.setIcon(QtWidgets.QMessageBox.Question)
+            qMsgBox.setWindowTitle("Image Quizzer Install")
             if bBackupComplete:
                 sMsg = "Backup complete - installing code ..."
             else:
@@ -217,18 +227,18 @@ class InstallerLogic():
                     shutil.rmtree(sPathInstall)
                 shutil.copytree(sSourceDir, sPathInstall)
 
-                self.statusBar.showMessage("Done")
+                self.statusBar.showMessage("Image Quizzer copy complete")
 
         except:
             tb = traceback.format_exc()
             self.statusBar.showMessage("!!! ERROR !!! ")
             qMsgBox = QtWidgets.QMessageBox()
-            qMsgBox.setText("Error installing software to target directory")
+            qMsgBox.setWindowTitle("ERROR!!!")
+            qMsgBox.setText("Error installing Image Quizzer software to target directory")
             qMsgBox.setInformativeText(tb)
             qMsgBox.exec()
 
 
-    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
