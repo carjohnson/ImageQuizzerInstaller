@@ -1,5 +1,5 @@
 '''
-    IQModuleConnector utility for Baines Image Quizzer.
+    ImageQuizzerModuleConnector utility for Baines Image Quizzer.
 
     Application to update the NA-MIC Extensions Slicer-xxxx.ini file with the path to the 
     Baines Image Quizzer. Additionally, there is a button to start the Image Quizzer.
@@ -8,7 +8,7 @@
     how to manually add the module path to this list.  The update of the Slicer-xxxx.ini file uses
     the current drive letter for the USB which can change depending which PC or laptop the USB is plugged into.
 
-    This source file ImageQuizzerModuleConnector.py is packaged into a static executable using 'pyinstaller' . 
+    This source file is packaged into a static executable using 'pyinstaller' . 
     The resulting executable is added to the BainesImageQuizzer project.
     
     Author: Carol Johnson (Baines Imaging Research Laboratories - LRCP London, ON)
@@ -85,7 +85,8 @@ class FormWidget(QWidget):
 
         qLblInfo = QtWidgets.QLabel()
         qLblInfo.setWordWrap(True)
-        qLblInfo.setText("This application will update Slicer's module list and start the Image Quizzer module.\n")
+        qLblInfo.setText("This application will update Slicer's module list and start the Image Quizzer module."\
+                         + " Use the 'Connect' button when plugging a USB into different PCs.\n")
 
         # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         # Image Quizzer location
@@ -107,7 +108,7 @@ class FormWidget(QWidget):
         qBtnChangeSlicerPath = QtWidgets.QPushButton("Browse")
         qBtnChangeSlicerPath.clicked.connect(self.getSlicerLocationPath)
 
-        qLblInstructions = QtWidgets.QLabel("\nConnect module to Slicer (if not already done or changing PC's) and Start\n")
+        qLblInstructions = QtWidgets.QLabel("\nConnect module to Slicer (first time or when changing PCs) and Start\n")
         qBtnConnectSlicer = QtWidgets.QPushButton("Connect")
         qBtnConnectSlicer.clicked.connect(self.setupConnectModule)
 
@@ -213,58 +214,131 @@ class ApplicationLogic():
             This ini file is created when the administrator manually connects a module
             in Slicer's application settings or when extensions are added. 
 
+            This function looks for a previous connection to the module's code path
+            and if it exists it may have the wrong path.
+            It will be removed from the line and new path will be appended to end of line.
+
         '''
-        #check that ini file exists
-        bFileFound = False
+        try:
+            #check that ini file exists
+            bFileFound = False
+            bModuleUpdated = False
+            sMsg = ''
 
-        sSearchDir = os.path.join(sSlicerPath,'NA-MIC')
-        if os.path.exists(sSearchDir):
-            
-            lFiles = os.listdir(sSearchDir)
-            for sFile in lFiles:
-                if re.match("^Slicer.*ini$",sFile):
-                    bFileFound = True
-                    break
+            sSearchDir = os.path.join(sSlicerPath,'NA-MIC')
+            if os.path.exists(sSearchDir):
+                
+                lFiles = os.listdir(sSearchDir)
+                for sFile in lFiles:
+                    if re.match("^Slicer.*ini$",sFile):
+                        bFileFound = True
+                        break
 
-        if bFileFound == False:
-            qMsgBox = QtWidgets.QMessageBox()
-            qMsgBox.setWindowTitle("ERROR!!!")
-            qMsgBox.setText("Cannot connect Image Quizzer module to Slicer. Either: ")
-            qMsgBox.setInformativeText('\n   -the location specified for Slicer is incorrect OR'\
-                                       '\n   -the Slicer Extensions have not yet been installed. The Slicer-xxxx.ini file is missing.'\
-                                       +'\n\nSee documentation > Getting started'\
-                                        +'\nhttps://baines-imaging-research-laboratory.github.io/ImageQuizzerDocumentation')
-            qMsgBox.exec() 
-            return
-        
-        else:
-
-            # file found - update Modules list
-            self.statusBar.showMessage("Updating modules lists " + sFile)
-            sSlicerIniPath = os.path.join(sSearchDir, sFile)
-            sImageQuizzerCodePath = os.path.join(sModulePath,'ImageQuizzer','Code').replace('\\','/')
-
-            if os.path.exists(sImageQuizzerCodePath):
-
-                sLineToFind = "AdditionalPaths"
-    
-                for line in fileinput.FileInput(sSlicerIniPath, inplace=True):
-                    if sLineToFind in line:
-                        if sImageQuizzerCodePath not in line:
-                            line = line.rstrip('\n')
-                            line = line + ', ' + sImageQuizzerCodePath + '\n'
-                    print(line, end='')
-                    
-                fileinput.close()
-                self.statusBar.showMessage('Slicer module list updated')
-
-            else:
-                self.statusBar.showMessage('ERROR Connecting module to Slicer')
+            if bFileFound == False:
                 qMsgBox = QtWidgets.QMessageBox()
                 qMsgBox.setWindowTitle("ERROR!!!")
-                qMsgBox.setText("Cannot connect Image Quizzer module to Slicer\n..\\ImageQuizzer\\Code folder is missing. ")
-                qMsgBox.setInformativeText('Reset the Image Quizzer location above to the installation directory.')
+                qMsgBox.setText("Cannot connect Image Quizzer module to Slicer. Either: ")
+                qMsgBox.setInformativeText('\n   -the location specified for Slicer is incorrect OR'\
+                                        '\n   -the required Slicer Extensions have not yet been installed. (Slicer-xxxx.ini file is missing)'\
+                                        +'\n\nSee documentation > Getting started'\
+                                            +'\nhttps://baines-imaging-research-laboratory.github.io/ImageQuizzerDocumentation')
                 qMsgBox.exec() 
+                return
+            
+            else:
+
+                # file found - update Modules list
+                self.statusBar.showMessage("Updating modules lists " + sFile)
+                sSlicerIniPath = os.path.join(sSearchDir, sFile)
+                sImageQuizzerCodePath = os.path.join(sModulePath,'ImageQuizzer','Code').replace('\\','/')
+
+                if os.path.exists(sImageQuizzerCodePath):
+
+                    sLineToFind = "AdditionalPaths="
+                    sSubstringToFind = "ImageQuizzer/Code"
+        
+                    for line in fileinput.FileInput(sSlicerIniPath, inplace=True):
+                        if sLineToFind in line:
+
+                            #remove any existing entries
+                            indSearchStart = 0
+                            while(indSearchStart < len(line)):
+                                iLengthLine = len(line) # for debug
+                                if sSubstringToFind in line:
+
+                                    iStartIndSubstr = line.find(sSubstringToFind, indSearchStart)
+                                    if iStartIndSubstr > -1:
+                                        iEndIndSubstr = iStartIndSubstr + len(sSubstringToFind)
+
+                                        #end of line entry
+                                        if iEndIndSubstr == len(line) -1: # entry at end of line (\n included in length)
+                                            iStartIndOfRemoval = line.rfind(',',0,iStartIndSubstr)
+
+                                            if iStartIndOfRemoval == -1: # no preceding comma - must be the first
+                                                iStartIndOfRemoval = line.rfind('=',0,iStartIndSubstr)
+                                                line = line[0 : iStartIndOfRemoval + 1] + line[iEndIndSubstr :]
+
+                                            else:
+                                                line = line[0 : iStartIndOfRemoval] + line[iEndIndSubstr :]
+
+                                            indSearchStart = len(line)
+
+                                        # not end of line entry
+                                        else: # check if part of longer path
+                                            if line[iEndIndSubstr] == '/':
+                                                indSearchStart = iEndIndSubstr + 1
+
+                                            else: # correct entry
+                                                iStartIndOfRemoval = line.rfind(',',0,iStartIndSubstr)
+                                                if iStartIndOfRemoval == -1: # no preceding comma - must be the first
+                                                    iStartIndOfRemoval = line.rfind('=',0,iStartIndSubstr)
+                                                    line = line[0 : iStartIndOfRemoval + 1] + line[iEndIndSubstr + 1 : ]
+                                                    indSearchStart = iStartIndOfRemoval + 1
+                                                else:
+                                                    line = line[0 : iStartIndOfRemoval] + line[iEndIndSubstr + 1 : ]
+                                                    indSearchStart = iStartIndOfRemoval
+
+                                    else: # not found in (remainder of) search
+                                        indSearchStart = len(line) # end the while loop
+
+                                else:   # not found
+                                    indSearchStart = len(line) # end the while loop
+
+
+
+                            # append to end of line
+                            line = line.rstrip('\n')
+                            if len(line) == len(sLineToFind):
+                                line = line + sImageQuizzerCodePath + '\n'
+                            else:
+                                line = line + ', ' + sImageQuizzerCodePath + '\n'
+
+                            bModuleUpdated = True
+
+                        print(line, end='')
+
+
+                    fileinput.close()
+                    if bModuleUpdated:
+                        self.statusBar.showMessage('Slicer module list updated')
+                    else: 
+                        sMsg = "Problem with Slicer-xxxx.ini file. Add module manually in Slicer's Applications>Modules settings or see administrator."
+                        raise
+
+                else:
+                    sMsg = "..\\ImageQuizzer\\Code folder is missing. " + \
+                            "Reset the Image Quizzer location above to the installation directory."
+                    raise
+
+        except:
+            tb = traceback.format_exc()
+            sMsg = sMsg + '\n' + tb
+            self.statusBar.showMessage('ERROR Connecting module to Slicer')
+            qMsgBox = QtWidgets.QMessageBox()
+            qMsgBox.setWindowTitle("ERROR!!!")
+            qMsgBox.setText("Cannot connect Image Quizzer module to Slicer")
+            qMsgBox.setInformativeText(sMsg)
+            qMsgBox.exec() 
                                            
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
