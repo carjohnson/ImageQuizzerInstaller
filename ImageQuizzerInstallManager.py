@@ -1,26 +1,25 @@
 '''
-    Windows installer for Baines Image Quizzer.
+    Windows installer/updater for Baines Image Quizzer.
 
     Installation utility to copy files from the current directory to the user specified directory.
+    Additionally, if installing to an existing installation, this application will create a backup
+    (if requested) of the original module thus preserving the current input settings and output files.
 
-    This source file ImageQuizzerInstaller.py is packaged into a static executable using 'pyinstaller' . 
+    This source file ImageQuizzerInstallManager.py is packaged into a static executable using 'pyinstaller' . 
     The resulting executable is added to the BainesImageQuizzer project providing the administrator with
     a simple tool to copy all files in the Baines Image Quizzer project folder into either
     a new location or to replace an existing installation.
-
-    Additionally, if installing to an existing installation, this application will create a backup
-    (if requested) of the original module thus preserving the current input settings and output files.
-    
     
     Author: Carol Johnson (Baines Imaging Research Laboratories - LRCP London, ON)
     Date:   February 2024
     
-    Packaging:  >> cd to dir containing this module
-                >> pyinstaller ImageQuizzerInstaller.py --noconsole -n "setup-win" --onefile
-                >> copy ./dist/setup-win.exe to BainesImageQuizzer project folder
+    Packaging:  open cmd.exe
+                >> cd to dir containing this module
+                >> pyinstaller ImageQuizzerInstallManager.py --noconsole -n "setup-installManager" --onefile
+                >> copy ./dist/setup-installManager.exe to BainesImageQuizzer project folder
 
     Usage:      >> cd to download of BainesImageQuizzer project
-                >> setup-win
+                >> setup-installManager
 
     Documentation: https://baines-imaging-research-laboratory.github.io/ImageQuizzerDocumentation
 '''
@@ -54,9 +53,8 @@ class ImageQuizzerInstallerWindow(QMainWindow):
         super(ImageQuizzerInstallerWindow, self).__init__(*args, **kwargs)
 
         # self.setGeometry(300,300,300,300)
-        self.setWindowTitle("Setup Baines Image Quizzer")
+        self.setWindowTitle("Setup Manager - Baines Image Quizzer")
         self.setFixedWidth(500)
-
 
 
         self.statusBar = QtWidgets.QStatusBar()
@@ -96,9 +94,6 @@ class FormWidget(QWidget):
                          "replacing any pre-existing module. Additionally, it will create a backup" +\
                          " if requested in order to preserve any input settings and output results.\n")
  
-
-        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        # module copy
 
 
         qLblInstallPath = QtWidgets.QLabel("Install location :")
